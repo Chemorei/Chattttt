@@ -8,18 +8,20 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import com.example.mychatapp.databinding.ActivityOtpactivityBinding
 import com.example.mychatapp.databinding.ActivitySetupProfileBinding
+import com.example.mychatapp.model.User
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.storage.FirebaseStorage
+import java.util.Date
 
 class SetupProfileActivity : AppCompatActivity() {
 
-    var binding:ActivitySetupProfileBinding? =null
-    var auth:FirebaseAuth? = null
-    var database:FirebaseDatabase? =null
-    var storage:FirebaseStorage? = null
-    var selectedImage:Uri? =null
-    var dialog:ProgressDialog? = null
+    var binding: ActivitySetupProfileBinding? = null
+    var auth: FirebaseAuth? = null
+    var database: FirebaseDatabase? = null
+    var storage: FirebaseStorage? = null
+    var selectedImage: Uri? = null
+    var dialog: ProgressDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,7 +35,86 @@ class SetupProfileActivity : AppCompatActivity() {
         supportActionBar?.hide()
         binding!!.imageView.setOnClickListener {
             val intent = Intent()
-            intent.action = Intent.Action
+            intent.action = Intent.ACTION_GET_CONTENT
+            intent.type = "image/*"
+            startActivityForResult(intent, 45)
+        }
+        binding!!.continueButton.setOnClickListener {
+            val name: String = binding!!.profileBox.text.toString()
+            if (name.isEmpty()) {
+                binding!!.profileBox.setError("PLease type name")
+            }
+            dialog!!.show()
+            if (selectedImage != null) {
+                val reference = storage!!.reference.child("Profile")
+                    .child(auth!!.uid!!)
+                reference.putFile(selectedImage!!).addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        reference.downloadUrl.addOnCompleteListener { uri ->
+                            val imageUrl = uri.toString()
+                            val uid = auth!!.uid
+                            val phone = auth!!.uid
+                            val name: String = binding!!.profileBox.text.toString()
+                            val user = User(uid,name,phone,imageUrl)
+                            database!!.reference
+                                .child("users")
+                                .child("uid")
+                                .setValue(user)
+                                .addOnCompleteListener {
+                                    dialog!!.dismiss()
+                                    val intent = Intent(this,MainActivity::class.java)
+                                    startActivity(intent)
+                                    finish()
+                                }
+                        }
+
+                    }
+                    else{
+                        val uid = auth!!.uid
+                        val phone = auth!!.currentUser!!.phoneNumber
+                        val name: String = binding!!.profileBox.text.toString()
+                        val user = User(uid,name,phone,"No image")
+                        database!!.reference
+                            .child("users")
+                            .child(uid!!)
+                            .setValue(user)
+                                dialog!!.dismiss()
+                                val intent = Intent(this,MainActivity::class.java)
+                                startActivity(intent)
+                                finish()
+                    }
+                }
+            }
+        }
+    }
+
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (data !=null){
+            if (data.data !=null){
+                val uri = data.data //filepath
+                val storage = FirebaseStorage.getInstance()
+                val time = Date().time
+                val reference = storage.reference
+                    .child("Profile")
+                    .child(time.toString() + "")
+                reference.putFile(uri!!).addOnCompleteListener { task->
+                    if (task.isSuccessful){
+                        reference.downloadUrl.addOnCompleteListener { uri->
+                            val filepath = uri.toString()
+                            val obj = HashMap<String,Any>()
+                            obj["image"] = filepath
+                            database!!.reference
+                                .child("users")
+                                .child(FirebaseAuth.getInstance().uid!!)
+                                .updateChildren(obj).addOnSuccessListener {  }
+                        }
+                    }
+                }
+
+            }
         }
     }
 }
